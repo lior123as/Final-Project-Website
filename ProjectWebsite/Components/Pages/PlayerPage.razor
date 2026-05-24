@@ -1,0 +1,1077 @@
+@page "/player"
+@using DBL
+@using Models
+@inject NavigationManager NavigationManager
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@inject ProtectedSessionStorage Session
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+
+<style>
+    :root {
+        --dream-purple: #9d4edd;
+        --dream-pink: #ff00ff;
+        --dream-blue: #4361ee;
+        --nightmare-red: #ff003c;
+        --nightmare-orange: #ff6b00;
+        --star-glow: #ffffff;
+        --void-dark: #0a0015;
+        --card-bg: rgba(20, 5, 30, 0.85);
+    }
+
+    body {
+        margin: 0;
+        overflow-x: hidden;
+        background: linear-gradient(180deg, var(--void-dark) 0%, #1a0029 50%, #2d0038 100%);
+        font-family: 'Georgia', serif;
+    }
+
+    #mountain-canvas {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+    }
+
+    .dream-stars {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: 
+            radial-gradient(2px 2px at 20px 30px, var(--star-glow), transparent),
+            radial-gradient(2px 2px at 40px 70px, rgba(255,255,255,0.8), transparent),
+            radial-gradient(1px 1px at 90px 40px, rgba(255,255,255,0.9), transparent),
+            radial-gradient(2px 2px at 130px 80px, rgba(255,255,255,0.7), transparent),
+            radial-gradient(1px 1px at 160px 120px, rgba(255,255,255,0.8), transparent);
+        background-size: 200px 150px;
+        animation: twinkle 4s infinite;
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    @@keyframes twinkle {
+        0%, 100% { opacity: 0.7; }
+        50% { opacity: 1; }
+    }
+
+    .player-page-container {
+        display: flex;
+        min-height: 100vh;
+        position: relative;
+        z-index: 1;
+    }
+
+    /* Left Sidebar - Player List */
+    .sidebar {
+        width: 320px;
+        background: linear-gradient(135deg, rgba(157, 78, 221, 0.2), rgba(67, 97, 238, 0.2));
+        backdrop-filter: blur(25px);
+        border-right: 2px solid var(--dream-purple);
+        padding: 30px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        box-shadow: 0 0 50px rgba(157, 78, 221, 0.3);
+    }
+
+    .sidebar-title {
+        color: var(--dream-pink);
+        font-size: 1.8rem;
+        text-align: center;
+        text-shadow: 0 0 20px var(--dream-pink);
+        letter-spacing: 3px;
+        margin-bottom: 10px;
+    }
+
+    .btn-create-player {
+        background: linear-gradient(135deg, var(--dream-purple), var(--dream-blue));
+        color: white;
+        border: none;
+        padding: 15px 20px;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 1rem;
+        border-radius: 10px;
+        box-shadow: 0 0 20px rgba(157, 78, 221, 0.5);
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+    }
+
+    .btn-create-player:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 0 40px rgba(157, 78, 221, 0.8), 0 0 60px rgba(67, 97, 238, 0.4);
+        background: linear-gradient(135deg, var(--dream-pink), var(--dream-purple));
+    }
+
+    .player-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        overflow-y: auto;
+        max-height: calc(100vh - 250px);
+    }
+
+    .player-item {
+        background: linear-gradient(135deg, rgba(157, 78, 221, 0.3), rgba(67, 97, 238, 0.1));
+        border: 2px solid rgba(157, 78, 221, 0.5);
+        padding: 15px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 0 15px rgba(157, 78, 221, 0.3);
+    }
+
+    .player-item:hover {
+        border-color: var(--dream-pink);
+        box-shadow: 0 0 30px rgba(255, 0, 255, 0.5);
+        transform: translateX(5px);
+    }
+
+    .player-item.selected {
+        border-color: var(--dream-pink);
+        box-shadow: 0 0 40px rgba(255, 0, 255, 0.7);
+        background: linear-gradient(135deg, rgba(255, 0, 255, 0.3), rgba(157, 78, 221, 0.4));
+    }
+
+    .player-item-name {
+        color: var(--star-glow);
+        font-size: 1.2rem;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+
+    .player-item-type {
+        color: var(--dream-blue);
+        font-size: 0.9rem;
+        font-style: italic;
+    }
+
+    /* Main Content Area */
+    .main-content {
+        flex: 1;
+        padding: 40px;
+        overflow-y: auto;
+    }
+
+    .player-detail-card {
+        background: linear-gradient(135deg, rgba(157, 78, 221, 0.3), rgba(67, 97, 238, 0.3));
+        backdrop-filter: blur(25px);
+        border: 2px solid var(--dream-purple);
+        padding: 40px;
+        border-radius: 20px;
+        box-shadow: 0 0 50px rgba(157, 78, 221, 0.4), inset 0 0 30px rgba(157, 78, 221, 0.1);
+        max-width: 900px;
+        margin: 0 auto;
+    }
+
+    .player-detail-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+        padding-bottom: 20px;
+        border-bottom: 2px solid var(--dream-purple);
+    }
+
+    .player-detail-name {
+        color: var(--dream-pink);
+        font-size: 2.5rem;
+        text-shadow: 0 0 20px var(--dream-pink);
+        letter-spacing: 3px;
+    }
+
+    .player-detail-type {
+        color: var(--dream-blue);
+        font-size: 1.3rem;
+        font-style: italic;
+        margin-top: 10px;
+    }
+
+    .player-rem-display {
+        color: var(--star-glow);
+        font-size: 1.5rem;
+        background: linear-gradient(135deg, rgba(157, 78, 221, 0.5), rgba(67, 97, 238, 0.5));
+        padding: 15px 25px;
+        border-radius: 10px;
+        box-shadow: 0 0 20px rgba(157, 78, 221, 0.5);
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 30px;
+    }
+
+    .btn-action {
+        background: linear-gradient(135deg, var(--dream-purple), var(--dream-blue));
+        color: white;
+        border: none;
+        padding: 12px 25px;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 1rem;
+        border-radius: 10px;
+        box-shadow: 0 0 20px rgba(157, 78, 221, 0.5);
+        transition: all 0.3s ease;
+    }
+
+    .btn-action:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 0 40px rgba(157, 78, 221, 0.8);
+        background: linear-gradient(135deg, var(--dream-pink), var(--dream-purple));
+    }
+
+    .btn-inventory {
+        background: linear-gradient(135deg, var(--dream-blue), var(--dream-purple));
+    }
+
+    .btn-heroes {
+        background: linear-gradient(135deg, var(--dream-pink), var(--dream-blue));
+    }
+
+    /* Modal Styles */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(5px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .modal-card {
+        background: linear-gradient(135deg, rgba(20, 5, 30, 0.95), rgba(67, 97, 238, 0.3));
+        backdrop-filter: blur(30px);
+        border: 2px solid var(--dream-purple);
+        padding: 40px;
+        border-radius: 20px;
+        box-shadow: 0 0 50px rgba(157, 78, 221, 0.5);
+        max-width: 500px;
+        width: 90%;
+    }
+
+    .modal-title {
+        color: var(--dream-pink);
+        font-size: 2rem;
+        text-align: center;
+        margin-bottom: 30px;
+        text-shadow: 0 0 20px var(--dream-pink);
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-label {
+        color: var(--dream-pink);
+        font-size: 1rem;
+        font-weight: bold;
+        letter-spacing: 2px;
+        margin-bottom: 8px;
+        display: block;
+    }
+
+    .form-input, .form-select {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.05);
+        border: 2px solid rgba(157, 78, 221, 0.5);
+        color: var(--star-glow);
+        padding: 12px;
+        font-family: 'Georgia', serif;
+        font-size: 1rem;
+        outline: none;
+        transition: all 0.3s;
+        border-radius: 10px;
+    }
+
+    .form-input:focus, .form-select:focus {
+        border-color: var(--dream-pink);
+        box-shadow: 0 0 20px rgba(157, 78, 221, 0.4);
+        background: rgba(157, 78, 221, 0.1);
+    }
+
+    .form-select option {
+        background: var(--void-dark);
+        color: var(--star-glow);
+    }
+
+    .modal-buttons {
+        display: flex;
+        gap: 15px;
+        margin-top: 30px;
+    }
+
+    .btn-save {
+        flex: 1;
+        background: linear-gradient(135deg, var(--dream-purple), var(--dream-blue));
+    }
+
+    .btn-cancel {
+        flex: 1;
+        background: linear-gradient(135deg, #666, #444);
+    }
+
+    /* Inventory Section */
+    .inventory-section {
+        margin-top: 30px;
+    }
+
+    .inventory-title {
+        color: var(--dream-pink);
+        font-size: 1.8rem;
+        margin-bottom: 20px;
+        text-shadow: 0 0 15px var(--dream-pink);
+    }
+
+    .inventory-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 15px;
+    }
+
+    .inventory-item {
+        background: linear-gradient(135deg, rgba(157, 78, 221, 0.2), rgba(67, 97, 238, 0.1));
+        border: 2px solid rgba(157, 78, 221, 0.4);
+        padding: 15px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        text-align: center;
+    }
+
+    .inventory-item:hover {
+        border-color: var(--dream-pink);
+        box-shadow: 0 0 25px rgba(255, 0, 255, 0.4);
+        transform: scale(1.05);
+    }
+
+    .item-name {
+        color: var(--star-glow);
+        font-size: 1.1rem;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+
+    .item-quantity {
+        color: var(--dream-blue);
+        font-size: 0.9rem;
+    }
+
+    .item-rarity {
+        color: gold;
+        font-size: 1.2rem;
+        margin: 5px 0;
+    }
+
+    /* Item Detail Modal */
+    .item-detail-grid {
+        display: grid;
+        gap: 15px;
+    }
+
+    .item-detail-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px;
+        background: rgba(157, 78, 221, 0.1);
+        border-radius: 8px;
+    }
+
+    .item-detail-label {
+        color: var(--dream-pink);
+        font-weight: bold;
+    }
+
+    .item-detail-value {
+        color: var(--star-glow);
+    }
+
+    .stars-container {
+        display: inline-block;
+        color: gold;
+        font-size: 1.5rem;
+        text-shadow: 0 0 10px gold;
+    }
+
+    .empty-state {
+        color: var(--star-glow);
+        text-align: center;
+        padding: 50px;
+        font-size: 1.2rem;
+        opacity: 0.7;
+    }
+
+    .dev-only-field {
+        border-color: var(--nightmare-red) !important;
+        box-shadow: 0 0 10px rgba(255, 0, 60, 0.3) !important;
+    }
+
+    .dev-label {
+        color: var(--nightmare-red) !important;
+        text-shadow: 0 0 10px var(--nightmare-red) !important;
+    }
+</style>
+
+<canvas id="mountain-canvas"></canvas>
+<div class="dream-stars"></div>
+
+@if (!isLoggedIn)
+{
+    <div class="empty-state">
+        Please login to access your players
+        <br />
+        <button class="btn-create-player" style="margin-top: 20px;" @onclick="NavigateToLogin">Go to Login</button>
+    </div>
+}
+else if (isLoading)
+{
+    <div class="empty-state">Loading players...</div>
+}
+else
+{
+    <div class="player-page-container">
+        <!-- Left Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-title">My Players</div>
+            <button class="btn-create-player" @onclick="OpenCreateModal">+ Create Player</button>
+            
+            @if (players.Count == 0)
+            {
+                <div class="empty-state" style="padding: 20px; font-size: 1rem;">
+                    No players yet.<br/>Create your first player!
+                </div>
+            }
+            else
+            {
+                <div class="player-list">
+                    @foreach (var player in players)
+                    {
+                        <div class="player-item @(selectedPlayer?.Id == player.Id ? "selected" : "")"
+                             @onclick="() => SelectPlayer(player)">
+                            <div class="player-item-name">@player.Name</div>
+                            <div class="player-item-type">@player.Type</div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            @if (selectedPlayer == null)
+            {
+                <div class="empty-state">
+                    Select a player from the list or create a new one
+                </div>
+            }
+            else
+            {
+                <div class="player-detail-card">
+                    <div class="player-detail-header">
+                        <div>
+                            <div class="player-detail-name">@selectedPlayer.Name</div>
+                            <div class="player-detail-type">@selectedPlayer.Type</div>
+                        </div>
+                        <div class="player-rem-display">
+                            💎 @selectedPlayer.Rem Rem
+                        </div>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button class="btn-action btn-inventory" @onclick="ShowInventory">
+                            📦 View Inventory
+                        </button>
+                        <button class="btn-action btn-heroes" @onclick="ShowHeroes">
+                            🦸 View Heroes
+                        </button>
+                        <button class="btn-action" @onclick="OpenEditModal">
+                            ✏️ Edit Player
+                        </button>
+                    </div>
+                    
+                    @if (showInventory)
+                    {
+                        <div class="inventory-section">
+                            <div class="inventory-title">📦 Inventory</div>
+                            @if (playerInventory.Count == 0)
+                            {
+                                <div class="empty-state">No items in inventory</div>
+                            }
+                            else
+                            {
+                                <select class="form-select" style="width: 100%; padding: 8px 12px; font-size: 0.95rem;"
+                                        @bind="sorting">
+                                    <option value="">Sort by...</option>
+                                    <option value="quantity">Quantity</option>
+                                    <option value="rarity">Rarity</option>
+                                </select>
+                                <button class="btn-action" style="margin-top: 10px;" @onclick="LoadPlayerInventory">
+                                    🔄 Sort
+                                </button>
+                                <div class="inventory-grid">
+                                    @foreach (var invItem in playerInventory)
+                                    {
+                                        var item = allItems.FirstOrDefault(i => i.Name == invItem.name);
+                                        if (item != null)
+                                        {
+                                            <div class="inventory-item" @onclick="() => ShowItemDetail(item, invItem.quantity)">
+                                                <div class="item-name">@item.Name</div>
+                                                <div class="item-rarity">
+                                                    @{
+                                                        var stars = RenderStars(item.Rarity);
+                                                    }
+                                                    @((MarkupString)stars)
+                                                </div>
+                                                <div class="item-quantity">Qty: @invItem.quantity</div>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (showHeroes)
+                    {
+                        <div class="inventory-section">
+                            <div class="inventory-title">🦸 Heroes</div>
+                            @if (playerHeroes.Count == 0)
+                            {
+                                <div class="empty-state">No heroes owned. Devs can create new heroes!</div>
+                            }
+                            else
+                            {
+                                <div class="inventory-grid">
+                                    @foreach (var hero in playerHeroes)
+                                    {
+                                        <div class="inventory-item" @onclick="() => ShowHeroDetail(hero)">
+                                            <div class="item-name">@hero.Name</div>
+                                            <div class="item-quantity">Level</div>
+                                            <div class="item-quantity">@hero.Type - @hero.AttackType</div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            @if (currentUser != null && currentUser.IsDev)
+                            {
+                                <button class="btn-action btn-heroes" style="margin-top: 20px;" @onclick="OpenCreateHeroModal">
+                                    + Create New Hero
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<!-- Create/Edit Player Modal -->
+@if (showPlayerModal)
+{
+    <div class="modal-overlay" @onclick="ClosePlayerModal">
+        <div class="modal-card" @onclick:stopPropagation>
+            <div class="modal-title">@(isEditMode ? "Edit Player" : "Create New Player")</div>
+            
+            <div class="form-group">
+                <label class="form-label">Player Name</label>
+                <input type="text" class="form-input" @bind="modalPlayerName" placeholder="Enter player name" />
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Player Type</label>
+                <select class="form-select" @bind="modalPlayerType">
+                    <option value="">Select Type</option>
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                </select>
+            </div>
+
+            @if (isEditMode && currentUser != null && currentUser.IsDev)
+            {
+                <div class="form-group">
+                    <label class="form-label dev-label">💰 Rem Amount (Dev Only)</label>
+                    <input type="number" class="form-input dev-only-field" @bind="modalPlayerRem" placeholder="Rem amount" />
+                </div>
+            }
+
+            <div class="modal-buttons">
+                <button class="btn-action btn-cancel" @onclick="ClosePlayerModal">Cancel</button>
+                <button class="btn-action btn-save" @onclick="SavePlayer">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Item Detail Modal -->
+@if (showItemDetailModal && selectedItem != null)
+{
+    <div class="modal-overlay" @onclick="CloseItemDetailModal">
+        <div class="modal-card" @onclick:stopPropagation>
+           
+                
+
+               
+            <div class="modal-title">@selectedItem.Name</div>
+            
+            <div class="item-detail-grid">
+                <div class="item-detail-row">
+                    <span class="item-detail-label">Description:</span>
+                    <span class="item-detail-value">@selectedItem.Description</span>
+                </div>
+                
+                <div class="item-detail-row">
+                    <span class="item-detail-label">Rarity:</span>
+                    <span class="item-detail-value">
+                        <span class="stars-container">
+                            @{
+                                var stars = RenderStars(selectedItem.Rarity);
+                            }
+                            @((MarkupString)stars)
+                        </span>
+                        (@selectedItem.Rarity stars)
+                    </span>
+                </div>
+                
+                <div class="item-detail-row">
+                    <span class="item-detail-label">Price:</span>
+                    <span class="item-detail-value">💎 @selectedItem.Price Rem</span>
+                </div>
+                
+                <div class="item-detail-row">
+                    <span class="item-detail-label">Quantity:</span>
+                    <span class="item-detail-value">@selectedItemQuantity</span>
+                </div>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn-action btn-cancel" @onclick="CloseItemDetailModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Hero Detail Modal -->
+@if (showHeroDetailModal && selectedHero != null)
+{
+    <div class="modal-overlay" @onclick="CloseHeroDetailModal">
+        <div class="modal-card" style="max-width: 700px;" @onclick:stopPropagation>
+            <div class="modal-title">@selectedHero.Name</div>
+            
+            <div class="item-detail-grid">
+                <div class="item-detail-row">
+                    <span class="item-detail-label">Description:</span>
+                    <span class="item-detail-value">@selectedHero.Description</span>
+                </div>
+                
+                <div class="item-detail-row">
+                    <span class="item-detail-label">Level:</span>
+                    <span class="item-detail-value"></span>
+                </div>
+                
+                <div class="item-detail-row">
+                    <span class="item-detail-label">HP:</span>
+                    <span class="item-detail-value">@selectedHero.StarterHp.ToString("F1") / @selectedHero.StarterHp (base)</span>
+                </div>
+                
+                <div class="item-detail-row">
+                    <span class="item-detail-label">Type:</span>
+                    <span class="item-detail-value">@selectedHero.Type</span>
+                </div>
+                
+                <div class="item-detail-row">
+                    <span class="item-detail-label">Attack Type:</span>
+                    <span class="item-detail-value">@selectedHero.AttackType</span>
+                </div>
+                
+                <div class="item-detail-row">
+                    <span class="item-detail-label">Skill Points Left:</span>
+                    <span class="item-detail-value"></span>
+                </div>
+            </div>
+
+            <div style="margin-top: 20px;">
+                <div class="inventory-title" style="font-size: 1.3rem;">🌟 Skill Tree</div>
+                @if (heroSkills.Count == 0)
+                {
+                    <div class="empty-state" style="padding: 20px; font-size: 1rem;">No skills available for this hero</div>
+                }
+                else
+                {
+                    
+                }
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn-action btn-cancel" @onclick="CloseHeroDetailModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Create Hero Modal (Dev Only) -->
+@if (showCreateHeroModal)
+{
+    <div class="modal-overlay" @onclick="CloseCreateHeroModal">
+        <div class="modal-card" @onclick:stopPropagation>
+            <div class="modal-title">Create New Hero</div>
+            
+            <div class="form-group">
+                <label class="form-label">Hero Name</label>
+                <input type="text" class="form-input" @bind="modalHeroName" placeholder="Enter hero name" />
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea class="form-input" @bind="modalHeroDescription" rows="3" placeholder="Enter hero description"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Level</label>
+                <input type="number" class="form-input" @bind="modalHeroLevel" placeholder="Enter level" />
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Starter HP</label>
+                <input type="number" class="form-input" @bind="modalHeroStarterHp" placeholder="Enter starter HP" />
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Type</label>
+                <input type="text" class="form-input" @bind="modalHeroType" placeholder="e.g., Warrior, Mage" />
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Attack Type</label>
+                <input type="text" class="form-input" @bind="modalHeroAttackType" placeholder="e.g., Melee, Ranged" />
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn-action btn-cancel" @onclick="CloseCreateHeroModal">Cancel</button>
+                <button class="btn-action btn-save" @onclick="SaveNewHero">Create Hero</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private Consumer? currentUser;
+    private bool isLoggedIn;
+    private bool isLoading = true;
+    private List<Player> players = new();
+    private Player? selectedPlayer;
+    private List<ItemShowingMerger> playerInventory = new();
+    private List<Item> allItems = new();
+    private string sorting = "";
+
+    // Hero-related variables
+    private List<Heroes> playerHeroes = new();
+    private Heroes? selectedHero;
+    private List<Skill> heroSkills = new();
+    private bool showHeroes;
+    private bool showHeroDetailModal;
+    private bool showCreateHeroModal;
+    
+    // Modal form values for hero creation
+    private string modalHeroName = "";
+    private string modalHeroDescription = "";
+    private int modalHeroLevel = 1;
+    private int modalHeroStarterHp = 100;
+    private string modalHeroType = "";
+    private string modalHeroAttackType = "";
+    
+    // Modal states
+    private bool showPlayerModal;
+    private bool showItemDetailModal;
+    private bool showInventory;
+    private bool isEditMode;
+    
+    // Modal form values
+    private string modalPlayerName = "";
+    private string modalPlayerType = "";
+    private int modalPlayerRem = 0;
+    
+    // Item detail
+    private Item? selectedItem;
+    private int selectedItemQuantity;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var module = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/homeBackground.js");
+            await module.InvokeVoidAsync("initMountainBackground");
+
+            // Load user session
+            var sessionResult = await Session.GetAsync<Consumer>("consumer");
+            if (sessionResult.Success && sessionResult.Value != null)
+            {
+                currentUser = sessionResult.Value;
+                isLoggedIn = true;
+                await LoadPlayers();
+                await LoadAllItems();
+            }
+            else
+            {
+                isLoggedIn = false;
+            }
+            
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadPlayers()
+    {
+        if (currentUser == null) return;
+        
+        PlayerDB playerDB = new PlayerDB();
+        players = await playerDB.GetByUserIdAsync(currentUser.Id);
+        StateHasChanged();
+    }
+
+    private async Task LoadAllItems()
+    {
+        ItemDB itemDB = new ItemDB();
+        allItems = await itemDB.GetAllAsync();
+        StateHasChanged();
+    }
+    
+
+    private void SelectPlayer(Player player)
+    {
+        selectedPlayer = player;
+        showInventory = false;
+        showHeroes = false;
+        playerInventory = new List<ItemShowingMerger>();
+        playerHeroes = new List<Heroes>();
+        _ = LoadPlayerInventory();
+        StateHasChanged();
+    }
+
+    private void OpenCreateModal()
+    {
+        isEditMode = false;
+        modalPlayerName = "";
+        modalPlayerType = "";
+        modalPlayerRem = 0;
+        showPlayerModal = true;
+        StateHasChanged();
+    }
+
+    private void OpenEditModal()
+    {
+        if (selectedPlayer == null) return;
+        
+        isEditMode = true;
+        modalPlayerName = selectedPlayer.Name ?? "";
+        modalPlayerType = selectedPlayer.Type ?? "";
+        modalPlayerRem = selectedPlayer.Rem;
+        showPlayerModal = true;
+        StateHasChanged();
+    }
+
+    private void ClosePlayerModal()
+    {
+        showPlayerModal = false;
+        StateHasChanged();
+    }
+
+    private async Task SavePlayer()
+    {
+        if (string.IsNullOrWhiteSpace(modalPlayerName))
+        {
+            return; // Validate name
+        }
+
+        if (string.IsNullOrWhiteSpace(modalPlayerType))
+        {
+            return; // Validate type
+        }
+
+        PlayerDB playerDB = new PlayerDB();
+
+        if (isEditMode && selectedPlayer != null)
+        {
+            // Update existing player
+            selectedPlayer.Name = modalPlayerName;
+            selectedPlayer.Type = modalPlayerType;
+            
+            // Only devs can edit Rem
+            if (currentUser != null && currentUser.IsDev)
+            {
+                selectedPlayer.Rem = modalPlayerRem;
+            }
+            
+            await playerDB.UpdateAsync(selectedPlayer);
+        }
+        else
+        {
+            // Create new player
+            var newPlayer = await playerDB.CreatePlayerAsync(currentUser.Id, modalPlayerName, modalPlayerType);
+            players.Add(newPlayer);
+        }
+
+        showPlayerModal = false;
+        await LoadPlayers();
+        StateHasChanged();
+    }
+
+    private void ShowInventory()
+    {
+        showInventory = !showInventory;
+        StateHasChanged();
+    }
+
+    private void ShowHeroes()
+    {
+        showHeroes = !showHeroes;
+        if (showHeroes && selectedPlayer != null)
+        {
+            _ = LoadPlayerHeroes();
+        }
+        StateHasChanged();
+    }
+    
+    private async Task LoadPlayerInventory()
+    {
+        if (selectedPlayer == null) return;
+        
+        InventoryDB inventoryDB = new InventoryDB();
+        playerInventory = await inventoryDB.GetInventoryBySortingAsync(sorting, selectedPlayer.Id);
+        StateHasChanged();
+    }
+
+    private async Task LoadPlayerHeroes()
+    {
+        if (selectedPlayer == null) return;
+        
+        HeroesDB heroDB = new HeroesDB();
+        playerHeroes = await heroDB.GetByPlayerIdAsync(selectedPlayer.Id);
+        StateHasChanged();
+    }
+
+    private void ShowHeroDetail(Heroes hero)
+    {
+        selectedHero = hero;
+        showHeroDetailModal = true;
+        // Load skills for this hero
+        _ = LoadHeroSkills();
+        StateHasChanged();
+    }
+
+    private async Task LoadHeroSkills()
+    {
+        if (selectedHero == null) return;
+        
+        SkillDB skillDB = new SkillDB();
+        heroSkills = await skillDB.GetAllAsync();
+        StateHasChanged();
+    }
+
+    private void CloseHeroDetailModal()
+    {
+        showHeroDetailModal = false;
+        selectedHero = null;
+        heroSkills = new List<Skill>();
+        StateHasChanged();
+    }
+
+    private void OpenCreateHeroModal()
+    {
+        modalHeroName = "";
+        modalHeroDescription = "";
+        modalHeroLevel = 1;
+        modalHeroStarterHp = 100;
+        modalHeroType = "";
+        modalHeroAttackType = "";
+        showCreateHeroModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseCreateHeroModal()
+    {
+        showCreateHeroModal = false;
+        StateHasChanged();
+    }
+
+    private async Task SaveNewHero()
+    {
+        if (string.IsNullOrWhiteSpace(modalHeroName))
+        {
+            return;
+        }
+
+        HeroesDB heroDB = new HeroesDB();
+        var newHero = await heroDB.InsertAsync(
+            new Heroes
+            {
+                Name = modalHeroName,
+                Description = modalHeroDescription,
+                
+                StarterHp = modalHeroStarterHp,
+                Type = modalHeroType,
+                AttackType = modalHeroAttackType
+            }
+        );
+
+        if (newHero != null && newHero.Id > 0)
+        {
+            // Add hero to player (this would require a player_has_hero table operation)
+            // For now, we'll just reload the heroes list
+            await LoadPlayerHeroes();
+        }
+
+        showCreateHeroModal = false;
+        StateHasChanged();
+    }
+
+    private void ShowItemDetail(Item item, int quantity)
+    {
+        selectedItem = item;
+        selectedItemQuantity = quantity;
+        showItemDetailModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseItemDetailModal()
+    {
+        showItemDetailModal = false;
+        selectedItem = null;
+        selectedItemQuantity = 0;
+        StateHasChanged();
+    }
+
+    private string RenderStars(float rarity)
+    {
+        var fullStars = (int)Math.Floor(rarity);
+        var hasHalfStar = rarity - fullStars >= 0.5;
+        
+        var starsHtml = "";
+        for (int i = 0; i < fullStars; i++)
+        {
+            starsHtml += "★";
+        }
+        if (hasHalfStar)
+        {
+            starsHtml += "½";
+        }
+        
+        return starsHtml;
+    }
+
+    private void NavigateToLogin()
+    {
+        NavigationManager.NavigateTo("/login");
+    }
+}

@@ -1,0 +1,260 @@
+﻿@page "/"
+@using DBL
+@using Models
+@inject NavigationManager NavigationManager
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@inject ProtectedSessionStorage Session
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+
+<style>
+    :root {
+        --dream-purple: #9d4edd;
+        --dream-pink: #ff00ff;
+        --dream-blue: #4361ee;
+        --nightmare-red: #ff003c;
+        --nightmare-orange: #ff6b00;
+        --star-glow: #ffffff;
+        --void-dark: #0a0015;
+    }
+
+    body {
+        margin: 0;
+        overflow: hidden;
+        background: linear-gradient(180deg, var(--void-dark) 0%, #1a0029 50%, #2d0038 100%);
+        font-family: 'Georgia', serif;
+        transform-style: preserve-3d;
+        transition: transform 0.8s ease-in, opacity 0.4s;
+    }
+
+    #mountain-canvas {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+    }
+
+    /* Dream Stars Background */
+    .dream-stars {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: 
+            radial-gradient(2px 2px at 20px 30px, var(--star-glow), transparent),
+            radial-gradient(2px 2px at 40px 70px, rgba(255,255,255,0.8), transparent),
+            radial-gradient(1px 1px at 90px 40px, rgba(255,255,255,0.9), transparent),
+            radial-gradient(2px 2px at 130px 80px, rgba(255,255,255,0.7), transparent),
+            radial-gradient(1px 1px at 160px 120px, rgba(255,255,255,0.8), transparent);
+        background-size: 200px 150px;
+        animation: twinkle 4s infinite;
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    @@keyframes twinkle {
+        0%, 100% { opacity: 0.7; }
+        50% { opacity: 1; }
+    }
+
+    /* Warning Corner Alert - Nightmare Style */
+    .warning-corner {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, rgba(255, 0, 60, 0.2), rgba(255, 107, 0, 0.2));
+        backdrop-filter: blur(10px);
+        border: 2px solid var(--nightmare-red);
+        padding: 15px 25px;
+        color: var(--nightmare-red);
+        z-index: 1001;
+        box-shadow: 0 0 30px rgba(255, 0, 60, 0.5), inset 0 0 20px rgba(255, 0, 60, 0.2);
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        animation: nightmare-pulse 2s infinite;
+        border-radius: 10px;
+    }
+
+    @@keyframes nightmare-pulse {
+        0%, 100% {
+            border-color: var(--nightmare-red);
+            box-shadow: 0 0 20px rgba(255, 0, 60, 0.5);
+        }
+        50% {
+            border-color: var(--nightmare-orange);
+            box-shadow: 0 0 40px rgba(255, 107, 0, 0.7);
+        }
+    }
+
+    .warning-title {
+        font-weight: bold;
+        font-size: 1.2rem;
+        letter-spacing: 2px;
+        text-shadow: 0 0 10px var(--nightmare-red);
+    }
+
+    .warning-reason {
+        font-size: 0.9rem;
+        color: #fff;
+        margin-top: 5px;
+        font-style: italic;
+    }
+
+    /* Transition Overlay */
+    #transition-overlay {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: var(--dream-pink);
+        font-size: 5rem;
+        font-weight: bold;
+        z-index: 10000;
+        opacity: 0;
+        pointer-events: none;
+        text-shadow: 0 0 30px var(--dream-pink), 0 0 60px var(--dream-purple);
+        font-family: 'Georgia', serif;
+    }
+
+    /* Home Card - Dream Portal Style */
+    .home-card {
+        background: linear-gradient(135deg, rgba(157, 78, 221, 0.3), rgba(67, 97, 238, 0.3));
+        backdrop-filter: blur(25px);
+        border: 2px solid var(--dream-purple);
+        padding: 50px 40px;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        text-align: center;
+        width: 400px;
+        border-radius: 20px;
+        box-shadow: 0 0 50px rgba(157, 78, 221, 0.4), inset 0 0 30px rgba(157, 78, 221, 0.1);
+        z-index: 100;
+    }
+
+    .home-card h1 {
+        color: var(--dream-pink);
+        text-shadow: 0 0 20px var(--dream-pink);
+        margin-bottom: 30px;
+        font-size: 2.5rem;
+        letter-spacing: 3px;
+    }
+
+    .home-card h3 {
+        color: var(--star-glow);
+        margin-bottom: 25px;
+        font-size: 1.3rem;
+    }
+
+    .btn-dream {
+        background: linear-gradient(135deg, var(--dream-purple), var(--dream-blue));
+        color: white;
+        border: none;
+        padding: 15px 20px;
+        margin: 10px 0;
+        width: 100%;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 1rem;
+        border-radius: 10px;
+        box-shadow: 0 0 20px rgba(157, 78, 221, 0.5);
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+    }
+
+    .btn-dream:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 0 40px rgba(157, 78, 221, 0.8), 0 0 60px rgba(67, 97, 238, 0.4);
+        background: linear-gradient(135deg, var(--dream-pink), var(--dream-purple));
+    }
+
+    hr {
+        border-color: var(--dream-purple);
+        margin: 25px 0;
+        box-shadow: 0 0 10px var(--dream-purple);
+    }
+</style>
+
+
+<canvas id="mountain-canvas"></canvas>
+<div class="dream-stars"></div>
+<div id="transition-overlay"></div>
+
+@if (currentWarning != null && currentWarning.IsWarned)
+{
+    <div class="warning-corner">
+        <div class="warning-title">⚠️ Warning</div>
+        <div class="warning-reason">REASON: @currentWarning.BanReason</div>
+    </div>
+}
+
+<div class="home-card">
+    <h1>Home Page</h1>
+    @if (con != null)
+    {
+        <h3>Welcome,  @con.Username!</h3>
+        <button class="btn-dream" @onclick="() => NaviAsync(4)">UPDATE PROFILE</button>
+        <button class="btn-dream" @onclick="() => NaviAsync(5)">PLAYER MANAGMENT</button>
+    }
+    else
+    {
+        <h3></h3>
+        <button class="btn-dream" @onclick="() => NaviAsync(1)">LOGIN</button>
+        <button class="btn-dream" @onclick="() => NaviAsync(2)">REGISTER</button>
+    }
+
+    @if (con != null && con.IsDev)
+    {
+        <hr />
+        <button class="btn-dream" @onclick="() => NaviAsync(3)">User Manager</button>
+       
+    }
+</div>
+
+@code {
+    Consumer con;
+    DevBan currentWarning;
+    private IJSObjectReference? module;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            module = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/homeBackground.js");
+            await module.InvokeVoidAsync("initMountainBackground");
+
+            var s = await Session.GetAsync<Consumer>("consumer");
+            if (s.Success)
+            {
+                con = s.Value;
+
+                // Fetch warning status for the logged-in user
+                DevBanDB banDB = new DevBanDB();
+                var allBans = await banDB.GetAllAsync();
+                // Assuming DevBan has a way to relate to the Consumer (Id or Username)
+                currentWarning = allBans.FirstOrDefault(b => b.IsWarned && b. UserID == con.Id);
+
+                StateHasChanged();
+            }
+        }
+    }
+
+    async Task NaviAsync(int a)
+    {
+
+        string pageName = a switch { 1 => "LOGIN", 2 => "REGISTER", 3 => "USER MANAGER", 4 => "UPDATE", 5=>"PLAYER MANAGMENT" , _ => "HOME" };
+        string route = a switch { 1 => "/login", 2 => "/register", 3 => "/warnConsumer", 4 => "/updateConsumer",5 =>"/player" , _ => "/" };
+
+
+        await JSRuntime.InvokeVoidAsync("triggerRotationFlight", pageName);
+        await Task.Delay(800);
+        NavigationManager.NavigateTo(route, forceLoad: true);
+    }
+}

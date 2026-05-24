@@ -1,0 +1,29 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+    min-height: 100vh;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: 'Arial Black', sans-serif;
+    position: relative;
+}
+
+.title-container {
+    position: absolute;
+    left: initial;
+    top: 10px;
+    z-index: 10;
+}
+
+.button-container {
+    position: absolute;
+    z-index: 10;
+}
+

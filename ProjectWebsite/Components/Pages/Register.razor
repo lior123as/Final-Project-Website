@@ -1,0 +1,234 @@
+﻿@page "/register"
+@inherits Microsoft.AspNetCore.Components.ComponentBase
+@using DBL
+@using Models
+@inject IJSRuntime JS
+@inject NavigationManager NavigationManager
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@inject ProtectedSessionStorage Session
+@rendermode InteractiveServer
+
+<style>
+    :root {
+        --dream-purple: #9d4edd;
+        --dream-pink: #ff00ff;
+        --dream-blue: #4361ee;
+        --nightmare-red: #ff003c;
+        --star-glow: #ffffff;
+        --void-dark: #0a0015;
+    }
+
+    body {
+        background-color: var(--void-dark);
+        margin: 0;
+        overflow: hidden;
+        font-family: 'Georgia', serif;
+    }
+
+    #rectCanvas {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+    }
+
+    .layout-stage {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        width: 100vw;
+        gap: 40px;
+        z-index: 10;
+    }
+
+    /* Registration Card - Dream Gateway Style */
+    .register-card {
+        background: linear-gradient(135deg, rgba(157, 78, 221, 0.25), rgba(67, 97, 238, 0.25));
+        backdrop-filter: blur(30px);
+        border: 2px solid var(--dream-purple);
+        padding: 45px;
+        width: 420px;
+        box-shadow: 0 0 50px rgba(157, 78, 221, 0.4), inset 0 0 30px rgba(157, 78, 221, 0.1);
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        color: white;
+        border-radius: 20px;
+        animation: dream-fade-in 0.8s ease-out;
+    }
+
+    /* Status Card - Nightmare Warning Style */
+    .status-card {
+        background: linear-gradient(135deg, rgba(255, 0, 60, 0.2), rgba(255, 107, 0, 0.15));
+        backdrop-filter: blur(25px);
+        border: 2px solid var(--nightmare-red);
+        padding: 30px;
+        width: 370px;
+        min-height: 420px;
+        box-shadow: 0 0 35px rgba(255, 0, 60, 0.3), inset 0 0 20px rgba(255, 0, 60, 0.1);
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        color: white;
+        border-radius: 15px;
+        opacity: 0;
+        transform: translateX(50px);
+        animation: nightmare-slide-in 0.6s 0.3s forwards;
+    }
+
+    .dream-title {
+        text-align: center;
+        font-size: 2.8rem;
+        color: var(--star-glow);
+        letter-spacing: 6px;
+        margin-bottom: 15px;
+        text-shadow: 0 0 20px var(--dream-pink), 0 0 40px var(--dream-purple);
+    }
+
+    .dream-input {
+        background: rgba(255, 255, 255, 0.05);
+        border: 2px solid rgba(157, 78, 221, 0.5);
+        color: var(--star-glow);
+        padding: 16px;
+        font-size: 1.1rem;
+        outline: none;
+        transition: 0.3s;
+        border-radius: 10px;
+        font-family: 'Georgia', serif;
+    }
+
+        .dream-input:focus {
+            border-color: var(--dream-pink);
+            box-shadow: 0 0 20px rgba(157, 78, 221, 0.4), inset 0 0 15px rgba(157, 78, 221, 0.1);
+            background: rgba(157, 78, 221, 0.1);
+        }
+
+    .btn-dream-submit {
+        background: linear-gradient(135deg, var(--dream-purple), var(--dream-blue));
+        color: var(--star-glow);
+        border: none;
+        padding: 18px;
+        font-weight: bold;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: 0.3s;
+        box-shadow: 0 0 25px rgba(157, 78, 221, 0.5);
+        margin-top: 10px;
+        border-radius: 10px;
+        letter-spacing: 2px;
+        font-size: 1rem;
+    }
+
+        .btn-dream-submit:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 0 40px rgba(157, 78, 221, 0.7), 0 0 60px rgba(255, 0, 255, 0.4);
+            background: linear-gradient(135deg, var(--dream-pink), var(--dream-purple));
+        }
+
+    /* Side Status Content */
+    .log-line {
+        font-size: 0.9rem;
+        border-left: 3px solid var(--nightmare-red);
+        padding-left: 12px;
+        margin-bottom: 8px;
+        font-family: 'Georgia', serif;
+    }
+
+    .log-success {
+        border-left-color: var(--dream-pink);
+        color: var(--dream-pink);
+        text-shadow: 0 0 10px var(--dream-pink);
+    }
+
+    .log-fail {
+        color: var(--nightmare-red);
+        text-shadow: 0 0 10px rgba(255, 0, 60, 0.5);
+    }
+
+    @@keyframes dream-fade-in {
+        from {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+
+        to {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    @@keyframes nightmare-slide-in {
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+</style>
+
+<canvas id="rectCanvas"></canvas>
+
+<div class="layout-stage">
+    @* REGISTRATION CARD *@
+    <div class="register-card">
+        <h1 class="dream-title">Register</h1>
+
+        <input placeholder="Email" @bind="email" class="dream-input" />
+        <input placeholder="Username" @bind="username" class="dream-input" />
+        <input type="password" placeholder="Password" @bind="password" class="dream-input" />
+
+        <button class="btn-dream-submit" @onclick="RegisterAsync">Register</button>
+    </div>
+
+    @* STATUS CARD (Side) *@
+    @if (resp != null)
+    {
+        <div class="status-card">
+            <h3 style="color: var(--nightmare-red); text-transform: uppercase; letter-spacing: 3px; text-shadow: 0 0 15px var(--nightmare-red);">Alert</h3>
+            <div style="flex-grow: 1; overflow-y: auto;">
+                @foreach (var key in resp.Keys)
+                {
+                    <div class="log-line @(resp[6] != "" ? "log-success" : "log-fail")">
+                        > @resp[key]
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    string username;
+    string password;
+    string email;
+   
+    Dictionary<int, string> resp;
+
+    async Task RegisterAsync()
+    {
+        Consumer a = new Consumer { Username = username, Email = email };
+        ConsumerDB CDB = new ConsumerDB();
+        
+        var res = await CDB.RegisterAsync(a, password);
+        resp = res;
+
+        // Check for success message at index 6
+        if (resp != null && resp.ContainsKey(6) && resp[6] != "")
+        {
+            await Task.Delay(1500);
+            NavigationManager.NavigateTo("/login");
+        }
+        StateHasChanged();
+    }
+    
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Initialize Cyan Lightning Background
+            await JS.InvokeAsync<IJSObjectReference>("import", "./js/RB.js");
+            await JS.InvokeVoidAsync("initLightningBackground", "rectCanvas");
+            
+        }
+    }
+}

@@ -1,0 +1,328 @@
+﻿@using DBL
+@using Models
+@inject IJSRuntime JS
+@inject NavigationManager NavigationManager
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@inject ProtectedSessionStorage Session
+@page "/login"
+@rendermode InteractiveServer
+
+@* 1. BACKGROUND LAYER *@
+<div class="background-container">
+    <canvas id="rectCanvas"></canvas>
+</div>
+
+@* 2. INTERACTIVE UI LAYER *@
+<div class="stage-container">
+    <div class="login-card">
+        <!-- Dream Portal Overlay -->
+        <div class="portal-overlay"></div>
+
+        <!-- Header Section -->
+        <div class="dream-title-wrapper">
+            <h1 class="dream-title" data-text="LOGIN">LOGIN</h1>
+        </div>
+
+        <!-- Username Input -->
+        <div class="input-wrapper">
+            <div class="input-label">Username</div>
+            <input type="text"
+                   class="dream-input"
+                   placeholder="Username"
+                   @bind="username"
+                   @oninput="TriggerGlitch" />
+        </div>
+
+        <!-- Password Input -->
+        <div class="input-wrapper">
+            <div class="input-label">Password</div>
+            <input type="password"
+                   class="dream-input"
+                   placeholder="Password"
+                   @bind="password"
+                   @oninput="TriggerGlitch" />
+        </div>
+
+        <!-- Action Button -->
+        <div class="btn-container">
+            <button class="dream-button" data-text="Login" @onclick="LoginAsync">
+                Login
+            </button>
+        </div>
+
+        <!-- Feedback/Warning Section -->
+        @if (!string.IsNullOrEmpty(response))
+        {
+            <div class="nightmare-warning">
+                <div class="warning-text">
+                    @response
+                </div>
+                <div class="nightmare-pulse"></div>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    :root {
+        --dream-purple: #9d4edd;
+        --dream-pink: #ff00ff;
+        --dream-blue: #4361ee;
+        --nightmare-red: #ff003c;
+        --nightmare-orange: #ff6b00;
+        --star-glow: #ffffff;
+        --card-bg: rgba(20, 5, 30, 0.85);
+    }
+
+    /* Layout Centering */
+    .stage-container {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10;
+        perspective: 1200px;
+    }
+
+    /* Dream Portal Card */
+    .login-card {
+        background: var(--card-bg);
+        backdrop-filter: blur(30px);
+        border: 2px solid var(--dream-purple);
+        padding: 50px 40px;
+        width: 450px;
+        display: flex;
+        flex-direction: column;
+        gap: 25px;
+        box-shadow: 0 0 50px rgba(157, 78, 221, 0.4), inset 0 0 30px rgba(157, 78, 221, 0.1);
+        position: relative;
+        overflow: hidden;
+        border-radius: 20px;
+        animation: portal-open 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    .portal-overlay {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(157, 78, 221, 0.1) 0%, transparent 50%, rgba(67, 97, 238, 0.1) 100%);
+        pointer-events: none;
+        animation: portal-flow 3s infinite linear;
+    }
+
+    @@keyframes portal-flow {
+        0% { transform: translateY(-20px); opacity: 0.5; }
+        50% { transform: translateY(20px); opacity: 0.8; }
+        100% { transform: translateY(-20px); opacity: 0.5; }
+    }
+
+    /* Dream Title Styling */
+    .dream-title-wrapper {
+        height: 80px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .dream-title {
+        position: relative;
+        font-size: 3.5rem;
+        font-weight: 900;
+        color: var(--star-glow);
+        letter-spacing: 8px;
+        text-shadow: 0 0 20px var(--dream-pink), 0 0 40px var(--dream-purple);
+        animation: dream-drift 3s infinite ease-in-out;
+    }
+
+        .dream-title::before, .dream-title::after {
+            content: attr(data-text);
+            position: absolute;
+            inset: 0;
+            opacity: 0.7;
+        }
+
+        .dream-title::before {
+            color: var(--dream-pink);
+            z-index: -1;
+            animation: title-glitch 0.4s infinite;
+        }
+
+        .dream-title::after {
+            color: var(--dream-blue);
+            z-index: -2;
+            animation: title-glitch 0.4s reverse infinite;
+        }
+
+    /* Input Styling */
+    .input-wrapper {
+        position: relative;
+        width: 100%;
+    }
+
+    .input-label {
+        color: var(--dream-pink);
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 2px;
+        margin-bottom: 8px;
+        text-shadow: 0 0 10px var(--dream-pink);
+    }
+
+    .dream-input {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 2px solid rgba(157, 78, 221, 0.5) !important;
+        color: var(--star-glow) !important;
+        padding: 16px;
+        font-family: 'Georgia', serif;
+        font-size: 1rem;
+        outline: none;
+        transition: all 0.3s;
+        border-radius: 10px;
+    }
+
+        .dream-input:focus {
+            border-color: var(--dream-pink) !important;
+            box-shadow: 0 0 20px rgba(157, 78, 221, 0.4), inset 0 0 15px rgba(157, 78, 221, 0.1);
+            background: rgba(157, 78, 221, 0.1) !important;
+        }
+
+    /* Dream Button Styling */
+    .dream-button {
+        width: 100%;
+        padding: 18px;
+        background: linear-gradient(135deg, var(--dream-purple), var(--dream-blue));
+        border: none;
+        color: var(--star-glow);
+        font-weight: bold;
+        letter-spacing: 3px;
+        cursor: pointer;
+        position: relative;
+        transition: 0.4s;
+        overflow: hidden;
+        border-radius: 10px;
+        font-size: 1.1rem;
+        box-shadow: 0 0 25px rgba(157, 78, 221, 0.5);
+    }
+
+        .dream-button:hover {
+            background: linear-gradient(135deg, var(--dream-pink), var(--dream-purple));
+            box-shadow: 0 0 40px rgba(255, 0, 255, 0.6), 0 0 60px rgba(157, 78, 221, 0.4);
+            transform: translateY(-2px);
+        }
+
+    /* Nightmare Warning Area */
+    .nightmare-warning {
+        border-left: 4px solid var(--nightmare-red);
+        background: linear-gradient(90deg, rgba(255, 0, 60, 0.15), rgba(255, 107, 0, 0.1));
+        padding: 18px;
+        position: relative;
+        overflow: hidden;
+        border-radius: 8px;
+    }
+
+    .warning-text {
+        color: var(--nightmare-red);
+        font-family: 'Georgia', serif;
+        font-weight: bold;
+        font-size: 0.9rem;
+        text-shadow: 0 0 10px rgba(255, 0, 60, 0.5);
+    }
+
+    .nightmare-pulse {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 2px;
+        background: var(--nightmare-red);
+        box-shadow: 0 0 15px var(--nightmare-red);
+        animation: nightmare-scan 2s linear infinite;
+    }
+
+    /* Keyframes */
+    @@keyframes portal-open {
+        0% {
+            opacity: 0;
+            transform: scale(0.85) rotateX(-15deg);
+            filter: brightness(2);
+        }
+
+        100% {
+            opacity: 1;
+            transform: scale(1) rotateX(0);
+            filter: brightness(1);
+        }
+    }
+
+    @@keyframes title-glitch {
+        0% { transform: translate(0); }
+        20% { transform: translate(-2px, 2px); }
+        40% { transform: translate(2px, -2px); }
+        100% { transform: translate(0); }
+    }
+
+    @@keyframes dream-drift {
+        0%, 100% { transform: translateX(0); }
+        50% { transform: translateX(4px); }
+    }
+
+    @@keyframes nightmare-scan {
+        0% { top: 0%; }
+        100% { top: 100%; }
+    }
+
+    .background-container {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        background: linear-gradient(180deg, #0a0015 0%, #1a0029 100%);
+    }
+</style>
+
+@code {
+    private string username = "";
+    private string password = "";
+    private string response = "";
+    private bool isTyping = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Initializing background rects
+            
+            var module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/loginBackground.js");
+            await module.InvokeVoidAsync("startFallingRects", "rectCanvas");
+        }
+    }
+
+    private async Task LoginAsync()
+    {
+        ConsumerDB DB = new ConsumerDB();
+        // Item1 is the Consumer(user), Item2 is the error message in case of failed login
+        var loginResult = await DB.LoginAsync(username, password);
+
+        if (loginResult.Item1 != null)
+        {
+            await Session.SetAsync("consumer", loginResult.Item1);
+            NavigationManager.NavigateTo("/", forceLoad: true);
+        }
+        else
+        {
+            response = loginResult.Item2;
+            StateHasChanged();
+        }
+    }
+
+    private void TriggerGlitch()
+    {
+        isTyping = true;
+        // Jitter effect duration
+        Task.Delay(100).ContinueWith(_ =>
+        {
+            isTyping = false;
+            InvokeAsync(StateHasChanged);
+        });
+    }
+}

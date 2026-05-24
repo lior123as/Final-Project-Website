@@ -1,0 +1,487 @@
+﻿@page "/skills"
+@using DBL
+@using Models
+@inject IJSRuntime JS
+@inject Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage.ProtectedSessionStorage Session
+@rendermode InteractiveServer
+@inject NavigationManager NavigationManager
+@implements IDisposable
+
+<div class="meta-viewport" @onwheel="HandleZoom" @onmousedown="StartPan" @onmousemove="UpdatePan" @onmouseup="EndPan" @onmouseleave="EndPan">
+    <!-- Layer 1: Dream Realm Background -->
+    <div class="dream-gradient-bg"></div>
+    <div class="animated-stars"></div>
+
+    <!-- Layer 2: Connection Lines -->
+    <canvas id="connectionsCanvas"></canvas>
+
+    <!-- Layer 3: Skill Nodes & Meta Indicators -->
+    <div class="interactive-layer" id="zoom-container" style="transform: translate(@(panX)px, @(panY)px) scale(@zoom);">
+        @foreach (var node in nodes)
+        {
+            <div class="dream-skill @(selectedSkill?.Id == node.S.Id ? "is-selected" : "")"
+                 style="left: @(node.X)px; top: @(node.Y)px; --glow: @(GetGlowColor(node.S.Id))"
+                 @onclick="() => selectedSkill = node.S" @onclick:stopPropagation>
+
+                <div class="skill-orb">
+                    <div class="orb-glow"></div>
+                    <div class="skill-content">
+                        <span class="skill-title">@node.S.Name.ToUpper()</span>
+                    </div>
+                    
+                </div>
+            </div>
+        }
+
+        @if (isDev)
+        {
+            @foreach (var p in plusButtons)
+            {
+                <div class="dream-plus-node" style="left: @(p.X)px; top: @(p.Y)px;"
+                     @onclick="() => PrepareCreate(p.Mode, p.ParentId, p.ChildIds)" @onclick:stopPropagation>
+                    <div class="plus-pulse"></div>
+                    <div class="plus-icon">+</div>
+                </div>
+            }
+        }
+    </div>
+
+    <!-- UI: Dream Sidebar -->
+    <div class="dream-sidebar @(selectedSkill != null ? "active" : "")">
+        @if (selectedSkill != null)
+        {
+            <div class="sidebar-crystal">
+                <div class="header-tag">SPIRIT MEMORY</div>
+                <h2 class="dream-title">@selectedSkill.Name</h2>
+                <div class="dream-line"></div>
+                <p class="dream-desc">@selectedSkill.Description</p>
+
+                <div class="dream-stats">
+                    <div class="dream-stat"><span>COST</span><strong>@selectedSkill.PointsRequired</strong></div>
+                    
+                </div>
+
+                @if (isDev)
+                {
+                    <div class="admin-panel">
+                        <button class="d-btn d-btn-primary" @onclick="OpenEditPanel">REVISE SPIRIT</button>
+                        <button class="d-btn d-btn-danger" @onclick="DeleteCurrentSkill">BANISH NODE</button>
+                    </div>
+                }
+                <button class="d-btn d-btn-close" @onclick="() => selectedSkill = null">CLOSE PORTAL</button>
+            </div>
+        }
+    </div>
+
+    <!-- UI: Dream Modal -->
+    @if (showDevPanel)
+    {
+        <div class="dream-overlay">
+            <div class="dream-modal">
+                <div class="modal-top">>> @modalTitle</div>
+                <div class="modal-inputs">
+                    <div class="input-block">
+                        <label>SPIRIT NAME</label>
+                        <input @bind="workingSkill.Name" />
+                    </div>
+                    <div class="input-block">
+                        <label>SOUL DESCRIPTION</label>
+                        <textarea @bind="workingSkill.Description" rows="3"></textarea>
+                    </div>
+                    <div class="input-row">
+                        <div class="input-block"><label>POINT REQ</label><input type="number" @bind="workingSkill.PointsRequired" /></div>
+                      
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="d-btn d-btn-primary" @onclick="ProcessAction">COMMIT CHANGES</button>
+                    <button class="d-btn d-btn-ghost" @onclick="() => showDevPanel = false">ABORT RITUAL</button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    :root {
+        --accent: #9d4edd;
+        --secondary: #ff00ff;
+        --danger: #ff003c;
+        --panel-bg: rgba(20, 5, 30, 0.85);
+        --star-glow: #ffffff;
+    }
+
+    .meta-viewport {
+        position: fixed;
+        inset: 0;
+        background: linear-gradient(180deg, #0a0015 0%, #1a0029 50%, #2d0038 100%);
+        overflow: hidden;
+        cursor: crosshair;
+        font-family: 'Georgia', serif;
+    }
+
+    .dream-gradient-bg {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at center, #1a0530 0%, #0a0015 100%);
+        z-index: 1;
+    }
+
+    .animated-stars {
+        position: absolute;
+        inset: 0;
+        background-image: 
+            radial-gradient(2px 2px at 50px 80px, var(--star-glow), transparent),
+            radial-gradient(1px 1px at 120px 40px, rgba(255,255,255,0.8), transparent),
+            radial-gradient(2px 2px at 200px 150px, rgba(255,255,255,0.7), transparent);
+        background-size: 250px 200px;
+        z-index: 2;
+        animation: star-twinkle 5s infinite;
+    }
+
+    @@keyframes star-twinkle {
+        0%, 100% { opacity: 0.7; }
+        50% { opacity: 1; }
+    }
+
+    canvas {
+        position: absolute;
+        inset: 0;
+        z-index: 5;
+        pointer-events: none;
+    }
+
+    .interactive-layer {
+        position: absolute;
+        transform-origin: 0 0;
+        z-index: 100;
+        pointer-events: none;
+    }
+
+    /* Dream Skill Nodes */
+    .dream-skill {
+        position: absolute;
+        width: 150px;
+        height: 150px;
+        margin: -75px;
+        pointer-events: all;
+        cursor: pointer;
+        z-index: 110;
+    }
+
+    .skill-orb {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        background: radial-gradient(circle at 30% 30%, rgba(157, 78, 221, 0.4), rgba(67, 97, 238, 0.2));
+        border: 2px solid rgba(157, 78, 221, 0.5);
+        backdrop-filter: blur(10px);
+        position: relative;
+        overflow: hidden;
+        transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 0 30px rgba(157, 78, 221, 0.3), inset 0 0 20px rgba(157, 78, 221, 0.1);
+    }
+
+    .orb-glow {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at center, var(--accent), transparent 70%);
+        opacity: 0.3;
+        animation: orb-pulse 3s infinite;
+    }
+
+    @@keyframes orb-pulse {
+        0%, 100% { transform: scale(1); opacity: 0.3; }
+        50% { transform: scale(1.1); opacity: 0.5; }
+    }
+
+    .skill-title {
+        font-size: 0.8rem;
+        color: var(--star-glow);
+        font-weight: 700;
+        text-align: center;
+        letter-spacing: 2px;
+        z-index: 2;
+        text-shadow: 0 0 10px var(--accent);
+    }
+
+    .level-indicator {
+        position: absolute;
+        bottom: 15px;
+        right: 15px;
+        font-size: 0.65rem;
+        color: var(--secondary);
+        font-weight: bold;
+        text-shadow: 0 0 8px var(--secondary);
+    }
+
+    .dream-skill:hover .skill-orb {
+        transform: scale(1.1);
+        border-color: var(--secondary);
+        box-shadow: 0 0 50px rgba(255, 0, 255, 0.4), inset 0 0 30px rgba(255, 0, 255, 0.2);
+    }
+
+    .dream-skill.is-selected .skill-orb {
+        border-color: var(--danger);
+        box-shadow: 0 0 60px rgba(255, 0, 60, 0.5), inset 0 0 40px rgba(255, 0, 60, 0.2);
+    }
+
+    /* Indicator Nodes (Pluses) */
+    .dream-plus-node {
+        position: absolute;
+        width: 35px;
+        height: 35px;
+        margin: -17.5px;
+        pointer-events: all;
+        cursor: cell;
+        z-index: 120;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .plus-pulse {
+        position: absolute;
+        inset: 0;
+        border: 2px solid var(--secondary);
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+    }
+
+    .plus-icon {
+        color: var(--secondary);
+        font-size: 1.4rem;
+        font-weight: 300;
+        text-shadow: 0 0 10px var(--secondary);
+    }
+
+    @@keyframes pulse {
+        0% { transform: scale(0.5); opacity: 1; }
+        100% { transform: scale(2); opacity: 0; }
+    }
+
+    /* Dream Sidebar */
+    .dream-sidebar {
+        position: fixed;
+        right: -470px;
+        top: 20px;
+        bottom: 20px;
+        width: 420px;
+        transition: 0.5s;
+        z-index: 500;
+    }
+
+        .dream-sidebar.active {
+            right: 20px;
+        }
+
+    .sidebar-crystal {
+        height: 100%;
+        background: var(--panel-bg);
+        backdrop-filter: blur(35px);
+        border-radius: 30px;
+        border: 2px solid rgba(157, 78, 221, 0.4);
+        padding: 40px;
+        color: var(--star-glow);
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 0 50px rgba(157, 78, 221, 0.3);
+    }
+
+    .header-tag {
+        font-size: 0.65rem;
+        color: var(--secondary);
+        letter-spacing: 4px;
+        margin-bottom: 10px;
+        text-shadow: 0 0 10px var(--secondary);
+    }
+
+    .dream-line {
+        height: 2px;
+        width: 50px;
+        background: linear-gradient(90deg, var(--accent), var(--secondary));
+        margin: 20px 0;
+        box-shadow: 0 0 10px var(--accent);
+    }
+
+    .dream-stats {
+        display: flex;
+        gap: 15px;
+        margin: 20px 0;
+    }
+
+    .dream-stat {
+        background: rgba(157, 78, 221, 0.15);
+        padding: 18px;
+        border-radius: 15px;
+        flex: 1;
+        text-align: center;
+        border: 1px solid rgba(157, 78, 221, 0.3);
+    }
+
+    /* Buttons */
+    .d-btn {
+        border-radius: 12px;
+        padding: 15px;
+        border: none;
+        font-weight: 700;
+        cursor: pointer;
+        margin-top: 12px;
+        transition: 0.2s;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .d-btn-primary {
+        background: linear-gradient(135deg, var(--accent), var(--secondary));
+        color: var(--star-glow);
+        box-shadow: 0 0 20px rgba(157, 78, 221, 0.4);
+    }
+
+    .d-btn-danger {
+        background: rgba(255, 0, 60, 0.15);
+        color: var(--danger);
+        border: 2px solid var(--danger);
+        box-shadow: 0 0 15px rgba(255, 0, 60, 0.3);
+    }
+
+    .d-btn-close {
+        background: rgba(255,255,255,0.1);
+        color: var(--star-glow);
+        border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    /* Dream Modal */
+    .dream-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(5, 0, 10, 0.85);
+        backdrop-filter: blur(8px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .dream-modal {
+        background: linear-gradient(135deg, rgba(20, 5, 30, 0.95), rgba(40, 10, 50, 0.95));
+        border-radius: 30px;
+        border: 2px solid rgba(157, 78, 221, 0.4);
+        padding: 45px;
+        width: 500px;
+        color: var(--star-glow);
+        box-shadow: 0 0 60px rgba(157, 78, 221, 0.3);
+    }
+
+    .input-block label {
+        font-size: 0.7rem;
+        color: var(--secondary);
+        display: block;
+        margin-bottom: 10px;
+        letter-spacing: 2px;
+        text-shadow: 0 0 8px var(--secondary);
+    }
+
+    .input-block input, .input-block textarea {
+        width: 100%;
+        background: rgba(255,255,255,0.05);
+        border: 2px solid rgba(157, 78, 221, 0.4);
+        border-radius: 12px;
+        padding: 14px;
+        color: var(--star-glow);
+        margin-bottom: 22px;
+        outline: none;
+        font-family: 'Georgia', serif;
+        transition: 0.3s;
+    }
+
+        .input-block input:focus, .input-block textarea:focus {
+            border-color: var(--secondary);
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.3);
+        }
+</style>
+
+@code {
+    private List<Node> nodes = new();
+    private List<SkillCon> connections = new();
+    private List<PlusData> plusButtons = new();
+    private Skill? selectedSkill;
+    private Skill workingSkill = new();
+    private bool isDev, showDevPanel, isPanning;
+    private string modalTitle = "", targetMode = "";
+    private double zoom = 1.0, panX = 150, panY = 150, startX, startY;
+    private int parentId;
+    private List<int> childIds = new();
+    private IJSObjectReference? _module;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", $"./js/skillsBackground.js?v={DateTime.Now.Ticks}");
+            await RefreshTree();
+        }
+    }
+
+    private async Task RefreshTree()
+    {
+        var res = await Session.GetAsync<Consumer>("consumer");
+        if(!res.Success)
+        {
+            NavigationManager.NavigateTo("/",forceLoad:true);
+        }
+        isDev = res.Value?.IsDev ?? false;
+        var skills = await new SkillDB().GetAllAsync();
+        connections = await new SkillConDB().GetAllAsync();
+
+        nodes.Clear();
+        var levels = skills.ToDictionary(s => s.Id, s => 0);
+        for (int i = 0; i < skills.Count; i++)
+        {
+            foreach (var c in connections)
+            {
+                if (levels.ContainsKey(c.SkillAfter) && levels[c.Skill] >= levels[c.SkillAfter])
+                    levels[c.SkillAfter] = levels[c.Skill] + 1;
+            }
+        }
+        foreach (var s in skills)
+        {
+            int lv = levels[s.Id], idx = skills.Where(x => levels[x.Id] == lv).ToList().IndexOf(s);
+            nodes.Add(new Node { S = s, X = (lv + 1) * 320, Y = (idx + 1) * 200 });
+        }
+
+        plusButtons.Clear();
+        foreach (var n in nodes)
+        {
+            var outgoing = connections.Where(c => c.Skill == n.S.Id).ToList();
+            if (outgoing.Any()) plusButtons.Add(new PlusData { X = (n.X + outgoing.Average(c => nodes.First(node => node.S.Id == c.SkillAfter).X)) / 2, Y = (n.Y + outgoing.Average(c => nodes.First(node => node.S.Id == c.SkillAfter).Y)) / 2, Mode = "hub", ParentId = n.S.Id, ChildIds = outgoing.Select(o => o.SkillAfter).ToList() });
+            else plusButtons.Add(new PlusData { X = n.X + 160, Y = n.Y, Mode = "end", ParentId = n.S.Id });
+        }
+
+        if (_module != null) { await _module.InvokeVoidAsync("updateLines", nodes, connections); }
+        StateHasChanged();
+    }
+
+    private string GetGlowColor(int id) => (id % 3 == 0) ? "#9d4edd" : (id % 3 == 1) ? "#ff00ff" : "#ff003c";
+    private void OpenEditPanel() { if (selectedSkill != null) { workingSkill = new Skill(selectedSkill); modalTitle = "REVISE_SPIRIT_DATA"; showDevPanel = true; } }
+    private async Task DeleteCurrentSkill() { if (selectedSkill != null) { await new SkillDB().DeleteAsync(selectedSkill); selectedSkill = null; await RefreshTree(); } }
+    private async Task ProcessAction()
+    {
+        SkillDB db = new();
+        if (modalTitle.Contains("REVISE")) await db.UpdateAsync(workingSkill);
+        else { if (targetMode == "hub") await db.CreateSkillBetweenAsync(workingSkill, parentId, childIds); else await db.CreateSkillAsync(workingSkill, parentId); }
+        showDevPanel = false; await RefreshTree();
+    }
+    private void PrepareCreate(string mode, int pId, List<int>? cIds) { targetMode = mode; parentId = pId; childIds = cIds ?? new(); workingSkill = new Skill { PointsRequired = 1 }; modalTitle = "INIT_NEW_SPIRIT"; showDevPanel = true; }
+    private void HandleZoom(WheelEventArgs e) => zoom = Math.Clamp(e.DeltaY < 0 ? zoom * 1.1 : zoom / 1.1, 0.2, 2.5);
+    private void StartPan(MouseEventArgs e) { isPanning = true; startX = e.ClientX - panX; startY = e.ClientY - panY; }
+    private void UpdatePan(MouseEventArgs e) { if (isPanning) { panX = e.ClientX - startX; panY = e.ClientY - startY; StateHasChanged(); } }
+    private void EndPan() => isPanning = false;
+    public void Dispose() => _module?.DisposeAsync();
+    private class Node { public Skill S { get; set; } = new(); public double X { get; set; } public double Y { get; set; } }
+    private class PlusData { public double X, Y; public string Mode = ""; public int ParentId; public List<int> ChildIds = new(); }
+}

@@ -1,0 +1,406 @@
+﻿@page "/warnConsumer"
+@using DBL
+@using Models
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@inject ProtectedSessionStorage Session
+<style>
+    :root {
+        --warning-color: #ffcc00; /* Neon Yellow */
+        --hazard-color: #ff3300; /* Neon Red */
+        --success-color: #00fff9; /* Bright Neon Cyan */
+        --background-color: #0a0a0a;
+        --sidebar-bg: rgba(0, 0, 0, 0.95);
+    }
+
+    #canvas-background {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: -1;
+        pointer-events: none;
+    }
+
+    .main-layout {
+        display: flex;
+        flex-direction: row;
+        width: 100vw;
+        height: 100vh;
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+        width: 350px;
+        min-width: 350px;
+        height: 100vh;
+        background: var(--sidebar-bg);
+        backdrop-filter: blur(20px);
+        border-right: 2px solid var(--warning-color);
+        padding: 30px;
+        display: flex;
+        flex-direction: column;
+        z-index: 10;
+        color: white;
+    }
+
+    .search-input {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--warning-color);
+        border-radius: 4px;
+        color: var(--warning-color);
+        padding: 12px;
+        margin-bottom: 20px;
+        outline: none;
+    }
+
+    .user-list {
+        overflow-y: auto;
+        overflow-x: hidden;
+        flex-grow: 1;
+        scrollbar-width: none;
+    }
+
+        .user-list::-webkit-scrollbar {
+            display: none;
+        }
+
+    .user-item {
+        padding: 15px;
+        border-bottom: 1px solid rgba(255, 204, 0, 0.1);
+        cursor: pointer;
+        transition: 0.2s;
+        color: #eee;
+    }
+
+        .user-item:hover {
+            background: rgba(255, 204, 0, 0.2);
+            color: var(--warning-color);
+            transform: translateX(8px);
+        }
+
+    /* ACTION STAGE */
+    .stage {
+        flex-grow: 1;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding-top: 50px;
+        overflow-y: auto;
+        z-index: 5;
+    }
+
+    /* FIX: High Visibility Title */
+    .glitch-title {
+        font-size: 3.5rem;
+        color: var(--success-color); /* Bright Cyan */
+        text-transform: uppercase;
+        font-weight: 900;
+        text-shadow: 0 0 15px rgba(0, 255, 249, 0.8), 0 0 30px rgba(0, 255, 249, 0.4);
+        margin: 0;
+        animation: slideDown 0.7s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+    }
+
+    .status-badge-container {
+        margin-top: 15px;
+        background: rgba(0,0,0,0.6);
+        padding: 25px;
+        border-radius: 12px;
+        border: 1px solid var(--success-color);
+        min-width: 400px;
+        box-shadow: 0 0 20px rgba(0, 255, 249, 0.1);
+    }
+
+    .status-label {
+        color: #aaa;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+    }
+
+    .status-value {
+        font-weight: 900;
+        font-size: 1.2rem;
+        display: block;
+        margin-top: 5px;
+    }
+
+    .status-reason {
+        font-size: 1rem;
+        color: #fff;
+        font-style: italic;
+        margin-top: 8px;
+        padding: 10px;
+        background: rgba(255,255,255,0.05);
+        border-left: 3px solid #fff;
+    }
+
+    .action-container {
+        display: flex;
+        gap: 40px;
+        margin-top: 35px;
+    }
+
+    .action-card {
+        background: rgba(15, 15, 15, 0.95);
+        backdrop-filter: blur(25px);
+        border: 1px solid var(--warning-color);
+        padding: 35px;
+        width: 420px;
+        border-radius: 15px;
+        opacity: 0;
+        transform: translateY(100px);
+        animation: slideUp 0.8s ease-out forwards;
+    }
+
+    .warn-card {
+        animation-delay: 0.2s;
+    }
+
+    .ban-card {
+        border-color: var(--hazard-color);
+        animation-delay: 0.4s;
+    }
+
+    .input-reason {
+        background: rgba(0,0,0,0.6);
+        border: 1px solid var(--warning-color);
+        color: #fff;
+        width: 100%;
+        height: 100px;
+        padding: 15px;
+        margin-bottom: 20px;
+        outline: none;
+    }
+
+    .datetime-input {
+        background: rgba(0,0,0,0.6);
+        border: 1px solid var(--hazard-color);
+        color: #fff;
+        padding: 12px;
+        width: 100%;
+        margin-bottom: 20px;
+        color-scheme: dark;
+    }
+
+    .button-warn {
+        background: var(--warning-color);
+        color: #000;
+        border: none;
+        padding: 15px;
+        width: 100%;
+        font-weight: bold;
+        cursor: pointer;
+        text-transform: uppercase;
+    }
+
+        .button-warn:hover {
+            filter: brightness(1.2);
+            box-shadow: 0 0 15px var(--warning-color);
+        }
+
+    .btn-back {
+        background: transparent;
+        border: 1px solid var(--warning-color);
+        color: var(--warning-color);
+        padding: 12px;
+        cursor: pointer;
+        width: 100%;
+    }
+
+    @@keyframes slideDown {
+        from {
+            transform: translateY(-100px);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    @@keyframes slideUp {
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+</style>
+
+<canvas id="canvas-background"></canvas>
+
+<div class="main-layout">
+    <div class="sidebar">
+        <h2 style="color: var(--warning-color); margin-bottom: 25px; letter-spacing: 3px;">DATABASE</h2>
+        <input class="search-input" placeholder="Search User..." @oninput="OnSearchAsync" />
+
+        <div class="user-list">
+            @foreach (var user in filteredUsers)
+            {
+                <div class="user-item" @onclick="() => SelectUserAsync(user)">
+                    @user.Username
+                </div>
+            }
+        </div>
+
+        <button class="btn-back" @onclick="GoBackAsync">EXIT TERMINAL</button>
+    </div>
+
+    <div class="stage">
+        @if (selectedUser != null)
+        {
+            <div class="selected-user-header" @key="selectedUser.Id">
+                @* User's Name - Now clearly visible Cyan *@
+                <h1 class="glitch-title" data-text="@selectedUser.Username">@selectedUser.Username</h1>
+
+                <div class="status-badge-container">
+                    @if (DBRecord != null)
+                    {
+                        <div style="margin-bottom: 20px;">
+                            <span class="status-label">Moderation Level:</span>
+                            <span class="status-value" style="color: @(DBRecord.IsWarned ? "var(--warning-color)" : "#00ffcc")">
+                                @(DBRecord.IsWarned ? "⚠️ WARNING_ACTIVE" : "✓ ACCOUNT_CLEAR")
+                            </span>
+                            @if (DBRecord.IsWarned)
+                            {
+                                <div class="status-reason">"@DBRecord.BanReason"</div>
+                            }
+                        </div>
+
+                        <div>
+                            <span class="status-label">Network Access:</span>
+                            @if (DBRecord.IsBanned && DBRecord.BanTime > DateTime.Now)
+                            {
+                                <span class="status-value" style="color: var(--hazard-color)">🚫 SUSPENDED_OFFLINE</span>
+                                <small style="color: #ff8888; display: block; margin-top: 5px;">
+                                    EXPIRES: @DBRecord.BanTime.ToString("f") (@GetRemainingTime(DBRecord.BanTime) left)
+                                </small>
+                                <div class="status-reason">"@DBRecord.BanReason"</div>
+                            }
+                            else
+                            {
+                                <span class="status-value" style="color: var(--success-color)">🌐 ACCESS_GRANTED</span>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="action-container" @key="selectedUser.Username">
+                <div class="action-card warn-card">
+                    <h3 style="color: var(--warning-color); margin-bottom: 15px;">ISSUE WARNING</h3>
+                    <textarea class="input-reason" placeholder="Enter reason for warning..." @bind="warnReason"></textarea>
+                    <button class="button-warn" @onclick="SubmitWarnAsync">COMMIT WARNING</button>
+                </div>
+
+                <div class="action-card ban-card">
+                    <h3 style="color: var(--hazard-color); margin-bottom: 15px;">TIME SUSPENSION</h3>
+                    <label style="font-size: 0.7rem; color: #777;">AUTOMATIC EXPIRATION:</label>
+                    <input type="datetime-local" class="datetime-input" @bind="banUntil" min="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" />
+                    <textarea class="input-reason" placeholder="Enter reason for ban..." @bind="banReason" style="border-color: var(--hazard-color)"></textarea>
+                    <button class="button-warn" @onclick="SubmitBanAsync" style="background: var(--hazard-color); color: #fff;">COMMIT BAN</button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div style="margin-top: 20vh; text-align: center; opacity: 0.5;">
+                <h1 style="color: var(--warning-color); letter-spacing: 10px;">AWAITING_INPUT</h1>
+                <p style="color: #fff;">Select a record from the directory to begin moderation protocols.</p>
+            </div>
+        }
+        <div class="response-text" style="margin-top: 40px; font-weight: bold; color: var(--warning-color); text-shadow: 0 0 10px var(--warning-color);">@response</div>
+    </div>
+</div>
+
+@code {
+    private List<Consumer> allUsers = new();
+    private List<Consumer> filteredUsers = new();
+    private Consumer? selectedUser;
+    private DevBan? DBRecord;
+
+    private string warnReason = "";
+    private string banReason = "";
+    private DateTime banUntil = DateTime.Now.AddDays(1);
+    private string response = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        allUsers = await new ConsumerDB().GetAllAsync();
+        filteredUsers = allUsers;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var module = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/warningBackground.js");
+            await module.InvokeVoidAsync("initWarningBackground", new[] { "!", "WARN", "⚠️", "BAN" });
+            var s = await Session.GetAsync<Consumer>("consumer");
+            if (!s.Success)
+            {
+                NavigationManager.NavigateTo("/", forceLoad: true);
+            }
+        }
+    }
+
+    private async Task OnSearchAsync(ChangeEventArgs e)
+    {
+        string term = e.Value?.ToString() ?? "";
+        filteredUsers = allUsers.Where(u => u.Username.Contains(term, StringComparison.OrdinalIgnoreCase)).ToList();
+        await Task.CompletedTask;
+    }
+
+    private string GetRemainingTime(DateTime banEnd)
+    {
+        TimeSpan remaining = banEnd - DateTime.Now;
+        if (remaining.TotalSeconds <= 0) return "EXPIRED";
+        return $"{(int)remaining.TotalDays}d {remaining.Hours}h {remaining.Minutes}m";
+    }
+
+    private async Task SelectUserAsync(Consumer user)
+    {
+        selectedUser = user;
+        DBRecord = await new DevBanDB().GetByIdAsync(user.Id);
+        response = "";
+        warnReason = "";
+        banReason = "";
+        if (DBRecord?.BanTime > DateTime.Now) banUntil = DBRecord.BanTime;
+        else banUntil = DateTime.Now.AddDays(1);
+        StateHasChanged();
+    }
+
+    private async Task SubmitWarnAsync()
+    {
+        if (selectedUser == null) return;
+        try
+        {
+            await new DevBanDB().WarnUser(selectedUser, warnReason);
+            DBRecord = await new DevBanDB().GetByIdAsync(selectedUser.Id);
+            response = $"[SUCCESS]: Warning logged for {selectedUser.Username}";
+        }
+        catch (Exception ex) { response = $"[ERROR]: {ex.Message}"; }
+    }
+
+    private async Task SubmitBanAsync()
+    {
+        if (selectedUser == null) return;
+        if (banUntil <= DateTime.Now) { response = "[ERROR]: Ban must end in the future."; return; }
+        try
+        {
+            await new DevBanDB().BanUser(selectedUser, banReason, banUntil);
+            DBRecord = await new DevBanDB().GetByIdAsync(selectedUser.Id);
+            response = $"[SUCCESS]: {selectedUser.Username} banned until {banUntil:f}";
+        }
+        catch (Exception ex) { response = $"[ERROR]: {ex.Message}"; }
+    }
+
+    private async Task GoBackAsync() => NavigationManager.NavigateTo("/");
+}
